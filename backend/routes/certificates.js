@@ -31,15 +31,28 @@ router.post('/generate/:donorId', protect, hospitalOnly, async (req, res) => {
 
       // Upload to Cloudinary
       const uploadResult = await new Promise((resolve, reject) => {
-        cloudinary.uploader.upload_stream(
+        const uploadStream = cloudinary.uploader.upload_stream(
           { resource_type: 'raw', folder: 'bloodlink-certificates', public_id: `cert_${donor._id}_${Date.now()}` },
-          (err, result) => { if (err) reject(err); else resolve(result); }
-        )(pdfBuffer);
+          (err, result) => {
+            if (err) {
+              console.error('Cloudinary Generation Error:', err);
+              reject(err);
+            } else resolve(result);
+          }
+        );
+        uploadStream.end(pdfBuffer);
       });
 
       // Save cert URL to donor
       await Donor.findByIdAndUpdate(req.params.donorId, {
-        $push: { donationHistory: { date: donationDate || new Date(), hospitalName: hospitalName || req.user.name, certificateUrl: uploadResult.secure_url } },
+        $push: {
+          donationHistory: {
+            date: donationDate || new Date(),
+            hospitalName: hospitalName || req.user.name,
+            certificateUrl: uploadResult.secure_url,
+            registeredByType: req.user.type
+          }
+        },
       });
 
       res.json({ certificateUrl: uploadResult.secure_url, message: 'Certificate generated successfully' });
@@ -81,10 +94,16 @@ router.post('/upload/:donorId', protect, hospitalOnly, upload.single('certificat
     if (!donor) return res.status(404).json({ message: 'Donor not found' });
 
     const uploadResult = await new Promise((resolve, reject) => {
-      cloudinary.uploader.upload_stream(
+      const uploadStream = cloudinary.uploader.upload_stream(
         { folder: 'bloodlink-certificates', resource_type: 'auto' },
-        (err, result) => { if (err) reject(err); else resolve(result); }
-      )(req.file.buffer);
+        (err, result) => { 
+          if (err) {
+            console.error('Cloudinary Upload Error:', err);
+            reject(err);
+          } else resolve(result); 
+        }
+      );
+      uploadStream.end(req.file.buffer);
     });
 
     await Donor.findByIdAndUpdate(req.params.donorId, {

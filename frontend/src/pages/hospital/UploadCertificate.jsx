@@ -46,7 +46,9 @@ export default function UploadCertificate() {
       const res = await API.post(`/certificates/generate/${selectedDonor._id}`, { donationDate })
       setResult(res.data.certificateUrl)
       toast.success('Certificate generated!')
-    } catch { toast.error('Failed to generate certificate') }
+    } catch (err) { 
+      toast.error(err.response?.data?.message || 'Failed to generate certificate') 
+    }
     finally { setLoading(false) }
   }
 
@@ -61,7 +63,9 @@ export default function UploadCertificate() {
       })
       setResult(res.data.certificateUrl)
       toast.success('Certificate uploaded!')
-    } catch { toast.error('Upload failed') }
+    } catch (err) { 
+      toast.error(err.response?.data?.message || 'Upload failed') 
+    }
     finally { setLoading(false) }
   }
 
