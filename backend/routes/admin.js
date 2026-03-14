@@ -7,6 +7,7 @@ const BloodRequest = require('../models/BloodRequest');
 const { protect, adminOnly } = require('../middleware/auth');
 
 // ─── DASHBOARD STATS ────────────────────────────────────────────────────────
+// ─── DASHBOARD STATS ────────────────────────────────────────────────────────
 router.get('/stats', protect, adminOnly, async (req, res) => {
   try {
     const [totalDonors, pendingDonors, totalHospitals, pendingHospitals, totalUsers, totalRequests, fulfilledRequests] = await Promise.all([
@@ -19,6 +20,24 @@ router.get('/stats', protect, adminOnly, async (req, res) => {
       BloodRequest.countDocuments({ status: 'fulfilled' }),
     ]);
     res.json({ totalDonors, pendingDonors, totalHospitals, pendingHospitals, totalUsers, totalRequests, fulfilledRequests });
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
+// ─── PUBLIC STATS (Landing Page) ───────────────────────────────────────────
+router.get('/public-stats', async (req, res) => {
+  try {
+    const [totalDonors, totalHospitals, fulfilledRequests] = await Promise.all([
+      Donor.countDocuments({ isApproved: true }),
+      Hospital.countDocuments({ isApproved: true }),
+      BloodRequest.countDocuments({ status: 'fulfilled' }),
+    ]);
+    res.json({ 
+      donors: totalDonors, 
+      hospitals: totalHospitals, 
+      livesSaved: fulfilledRequests * 3 // Standard impact metric
+    });
   } catch (err) {
     res.status(500).json({ message: err.message });
   }
