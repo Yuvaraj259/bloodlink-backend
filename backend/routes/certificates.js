@@ -32,7 +32,11 @@ router.post('/generate/:donorId', protect, hospitalOnly, async (req, res) => {
       // Upload to Cloudinary
       const uploadResult = await new Promise((resolve, reject) => {
         const uploadStream = cloudinary.uploader.upload_stream(
-          { resource_type: 'raw', folder: 'bloodlink-certificates', public_id: `cert_${donor._id}_${Date.now()}` },
+          { 
+            resource_type: 'auto', 
+            folder: 'bloodlink-certificates', 
+            public_id: `cert_${donor._id}_${Date.now()}.pdf` 
+          },
           (err, result) => {
             if (err) {
               console.error('Cloudinary Generation Error:', err);
