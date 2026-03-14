@@ -46,15 +46,25 @@ export function UserLogin() {
 }
 
 export function UserRegister() {
-  const [form, setForm] = useState({ name:'',email:'',password:'',phone:'',bloodGroup:'',city:'' })
+  const [form, setForm] = useState({ name:'',email:'',confirmEmail:'',password:'',phone:'',bloodGroup:'',city:'' })
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
   const { login } = useAuth()
 
+  const validatePassword = (pw) => {
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    return regex.test(pw);
+  }
+
   const handleSubmit = async (e) => {
-    e.preventDefault(); setLoading(true)
+    e.preventDefault(); 
+    if (form.email !== form.confirmEmail) return toast.error("Emails do not match");
+    if (!validatePassword(form.password)) return toast.error("Password must be 8+ chars, with uppercase, lowercase, number and special character");
+    
+    setLoading(true)
     try {
-      const res = await API.post('/auth/user/register', { ...form, location: { city: form.city } })
+      const { confirmEmail, ...submitData } = form;
+      const res = await API.post('/auth/user/register', { ...submitData, location: { city: form.city } })
       login({ token: res.data.token, user: res.data.user, type: 'user' })
       toast.success('Welcome to BloodLink!')
       navigate('/user')
@@ -69,7 +79,12 @@ export function UserRegister() {
         <div><label className="label">Phone</label><input className="input" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="10-digit #" required /></div>
       </div>
       <div><label className="label">Email Address</label><input className="input" type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="john@example.com" required /></div>
-      <div><label className="label">Create Password</label><input className="input" type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Min. 6 characters" required minLength={6} /></div>
+      <div><label className="label">Confirm Email</label><input className="input" type="email" value={form.confirmEmail} onChange={e=>setForm({...form,confirmEmail:e.target.value})} placeholder="Repeat email" required /></div>
+      <div>
+        <label className="label">Create Password</label>
+        <input className="input" type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Min. 8 chars, 1 Upper, 1 Special" required />
+        <p className="text-[10px] text-gray-400 mt-1">Must include uppercase, number & special char.</p>
+      </div>
       <div className="grid grid-cols-2 gap-4">
         <div><label className="label">Blood Group</label>
           <select className="input" value={form.bloodGroup} onChange={e=>setForm({...form,bloodGroup:e.target.value})} required>
@@ -118,14 +133,24 @@ export function DonorLogin() {
 }
 
 export function DonorRegister() {
-  const [form, setForm] = useState({ name:'',email:'',password:'',phone:'',bloodGroup:'',age:'',gender:'Male',city:'',address:'' })
+  const [form, setForm] = useState({ name:'',email:'',confirmEmail:'',password:'',phone:'',bloodGroup:'',age:'',gender:'Male',city:'',address:'' })
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
+  const validatePassword = (pw) => {
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    return regex.test(pw);
+  }
+
   const handleSubmit = async (e) => {
-    e.preventDefault(); setLoading(true)
+    e.preventDefault();
+    if (form.email !== form.confirmEmail) return toast.error("Emails do not match");
+    if (!validatePassword(form.password)) return toast.error("Password must be 8+ chars, with uppercase, lowercase, number and special character");
+
+    setLoading(true)
     try {
-      await API.post('/auth/donor/register', { ...form, location: { city: form.city, address: form.address } })
+      const { confirmEmail, ...submitData } = form;
+      await API.post('/auth/donor/register', { ...submitData, location: { city: form.city, address: form.address } })
       toast.success('Registration submitted! Wait for admin approval.')
       navigate('/login/donor')
     } catch (err) { toast.error(err.response?.data?.message || 'Registration failed') }
@@ -138,8 +163,14 @@ export function DonorRegister() {
         <div><label className="label">Full Name</label><input className="input" value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="John Doe" required /></div>
         <div><label className="label">Phone</label><input className="input" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} placeholder="Phone #" required /></div>
       </div>
-      <div><label className="label">Email Address</label><input className="input" type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="donor@example.com" required /></div>
-      <div><label className="label">Password</label><input className="input" type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Min. 6 chars" required minLength={6} /></div>
+      <div className="grid grid-cols-2 gap-4">
+        <div><label className="label">Email Address</label><input className="input" type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="donor@example.com" required /></div>
+        <div><label className="label">Confirm Email</label><input className="input" type="email" value={form.confirmEmail} onChange={e=>setForm({...form,confirmEmail:e.target.value})} placeholder="Repeat email" required /></div>
+      </div>
+      <div>
+        <label className="label">Password</label>
+        <input className="input" type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Min. 8 chars, 1 Upper, 1 Special" required />
+      </div>
       <div className="grid grid-cols-3 gap-3">
         <div><label className="label">Blood Group</label>
           <select className="input" value={form.bloodGroup} onChange={e=>setForm({...form,bloodGroup:e.target.value})} required>
@@ -197,14 +228,24 @@ export function HospitalLogin() {
 }
 
 export function HospitalRegister() {
-  const [form, setForm] = useState({ name:'',email:'',password:'',phone:'',type:'hospital',address:'',city:'',state:'',pincode:'',licenseNumber:'',contactPerson:'' })
+  const [form, setForm] = useState({ name:'',email:'',confirmEmail:'',password:'',phone:'',type:'hospital',address:'',city:'',state:'',pincode:'',licenseNumber:'',contactPerson:'' })
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
+  const validatePassword = (pw) => {
+    const regex = /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[@$!%*?&])[A-Za-z\d@$!%*?&]{8,}$/;
+    return regex.test(pw);
+  }
+
   const handleSubmit = async (e) => {
-    e.preventDefault(); setLoading(true)
+    e.preventDefault();
+    if (form.email !== form.confirmEmail) return toast.error("Emails do not match");
+    if (!validatePassword(form.password)) return toast.error("Password must be 8+ chars, with uppercase, lowercase, number and special character");
+
+    setLoading(true)
     try {
-      await API.post('/auth/hospital/register', form)
+      const { confirmEmail, ...submitData } = form;
+      await API.post('/auth/hospital/register', submitData)
       toast.success('Application submitted! Admin will review and approve.')
       navigate('/login/hospital')
     } catch (err) { toast.error(err.response?.data?.message || 'Registration failed') }
@@ -222,9 +263,12 @@ export function HospitalRegister() {
           </select>
         </div>
       </div>
-      <div><label className="label">Email</label><input className="input" type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} required /></div>
       <div className="grid grid-cols-2 gap-3">
-        <div><label className="label">Password</label><input className="input" type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} required minLength={6} /></div>
+        <div><label className="label">Email</label><input className="input" type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} required /></div>
+        <div><label className="label">Confirm Email</label><input className="input" type="email" value={form.confirmEmail} onChange={e=>setForm({...form,confirmEmail:e.target.value})} required /></div>
+      </div>
+      <div className="grid grid-cols-2 gap-3">
+        <div><label className="label">Password</label><input className="input" type="password" value={form.password} onChange={e=>setForm({...form,password:e.target.value})} placeholder="Strong password" required /></div>
         <div><label className="label">Phone</label><input className="input" value={form.phone} onChange={e=>setForm({...form,phone:e.target.value})} required /></div>
       </div>
       <div><label className="label">Address</label><input className="input" value={form.address} onChange={e=>setForm({...form,address:e.target.value})} required /></div>
