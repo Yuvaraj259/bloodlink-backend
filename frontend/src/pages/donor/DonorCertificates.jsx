@@ -47,14 +47,21 @@ export default function DonorCertificates() {
                     <p className="text-xs text-gray-500">#{i + 1}</p>
                   </div>
                 </div>
-                <div className="space-y-1 mb-4 text-sm text-gray-600">
-                  <p>🏥 {c.hospitalName || 'Blood Drive'}</p>
-                  <p>📅 {format(new Date(c.date), 'dd MMM yyyy')}</p>
+                <div className="space-y-1 mb-6 text-sm">
+                  <div className="flex justify-between text-gray-500"><span>Issued by:</span><span className="font-semibold text-gray-900">{c.hospitalName || 'Blood Center'}</span></div>
+                  <div className="flex justify-between text-gray-500"><span>Date:</span><span className="font-semibold text-gray-900">{format(new Date(c.date), 'dd MMM yyyy')}</span></div>
                 </div>
-                <a href={c.certificateUrl} target="_blank" rel="noreferrer" download
-                  className="flex items-center justify-center gap-2 w-full bg-purple-600 text-white px-4 py-2.5 rounded-xl text-sm font-medium hover:bg-purple-700 transition-colors">
-                  <Download className="w-4 h-4" /> Download Certificate
-                </a>
+                
+                <div className="flex gap-2">
+                  <a href={c.certificateUrl} target="_blank" rel="noreferrer" 
+                    className="flex-1 flex items-center justify-center gap-2 bg-purple-600 text-white px-4 py-2.5 rounded-xl text-sm font-bold hover:bg-purple-700 transition-all active:scale-95 shadow-md shadow-purple-100">
+                    <Download className="w-4 h-4" /> Download
+                  </a>
+                  <button onClick={() => {navigator.clipboard.writeText(c.certificateUrl); toast.success('Link copied!')}} 
+                    className="p-2.5 bg-purple-50 text-purple-600 rounded-xl hover:bg-purple-100 transition-colors" title="Copy Link">
+                    <FileText className="w-5 h-5" />
+                  </button>
+                </div>
               </div>
             ))}
           </div>

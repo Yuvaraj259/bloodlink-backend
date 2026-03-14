@@ -42,4 +42,24 @@ router.get('/my-donors', protect, hospitalOnly, async (req, res) => {
   }
 });
 
+// Search for any approved donor (to issue certificate)
+router.get('/search-donors', protect, hospitalOnly, async (req, res) => {
+  try {
+    const { query } = req.query;
+    if (!query) return res.status(400).json({ message: 'Search query required' });
+    
+    const donors = await Donor.find({
+      isApproved: true,
+      $or: [
+        { phone: query },
+        { email: query.toLowerCase() }
+      ]
+    }).select('name bloodGroup email phone location gender age donationHistory');
+    
+    res.json(donors);
+  } catch (err) {
+    res.status(500).json({ message: err.message });
+  }
+});
+
 module.exports = router;
