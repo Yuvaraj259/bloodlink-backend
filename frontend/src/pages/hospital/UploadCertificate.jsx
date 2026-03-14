@@ -152,40 +152,18 @@ export default function UploadCertificate() {
                 <input className="input" type="date" value={donationDate} onChange={e=>setDonationDate(e.target.value)} max={new Date().toISOString().split('T')[0]} />
               </div>
 
-              <div className="flex bg-gray-50 rounded-2xl p-1 mb-6">
-                <button onClick={()=>setMode('generate')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${mode==='generate'?'bg-white text-blood-600 shadow-sm':'text-gray-500'}`}>
-                  Auto-Generate PDF
-                </button>
-                <button onClick={()=>setMode('upload')} className={`flex-1 py-3 text-sm font-bold rounded-xl transition-all ${mode==='upload'?'bg-white text-blood-600 shadow-sm':'text-gray-500'}`}>
-                  Upload Scan/Photo
+              <div>
+                <div className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all ${file ? 'border-purple-400 bg-purple-50' : 'border-gray-200 hover:border-purple-300'}`}>
+                  <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" id="cert-upload" onChange={e=>setFile(e.target.files[0])} />
+                  <label htmlFor="cert-upload" className="cursor-pointer">
+                    <Upload className="w-10 h-10 text-gray-300 mx-auto mb-3" />
+                    {file ? <p className="text-purple-700 font-bold">{file.name}</p> : <p className="text-gray-500 font-medium">Click to select file (PDF/Image)</p>}
+                  </label>
+                </div>
+                <button onClick={handleUpload} disabled={loading||!file} className="btn-primary w-full mt-6 py-4 text-lg bg-blood-600 hover:bg-blood-700">
+                  {loading ? 'Uploading...' : 'Upload & Issue'}
                 </button>
               </div>
-
-              {mode === 'generate' ? (
-                <div className="text-center py-4">
-                  <div className="bg-blood-50 border border-blood-100 rounded-2xl p-6 mb-6">
-                    < Award className="w-12 h-12 text-blood-600 mx-auto mb-3" />
-                    <p className="font-bold text-gray-900">Official Digital Award</p>
-                    <p className="text-xs text-gray-500 mt-1">We will generate a high-quality PDF specifically for {selectedDonor?.name || 'the donor'}.</p>
-                  </div>
-                  <button onClick={handleGenerate} disabled={loading} className="btn-primary w-full py-4 text-lg">
-                    {loading ? 'Processing...' : 'Generate & Issue'}
-                  </button>
-                </div>
-              ) : (
-                <div>
-                  <div className={`border-2 border-dashed rounded-2xl p-10 text-center transition-all ${file ? 'border-purple-400 bg-purple-50' : 'border-gray-200 hover:border-purple-300'}`}>
-                    <input type="file" accept=".pdf,.jpg,.jpeg,.png" className="hidden" id="cert-upload" onChange={e=>setFile(e.target.files[0])} />
-                    <label htmlFor="cert-upload" className="cursor-pointer">
-                      <Upload className="w-10 h-10 text-gray-300 mx-auto mb-3" />
-                      {file ? <p className="text-purple-700 font-bold">{file.name}</p> : <p className="text-gray-500 font-medium">Click to select file</p>}
-                    </label>
-                  </div>
-                  <button onClick={handleUpload} disabled={loading||!file} className="btn-primary w-full mt-6 py-4 text-lg bg-purple-600 hover:bg-purple-700">
-                    {loading ? 'Uploading...' : 'Upload & Issue'}
-                  </button>
-                </div>
-              )}
             </div>
           </div>
         </div>

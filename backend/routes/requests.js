@@ -232,7 +232,13 @@ router.post('/:id/fulfill', protect, async (req, res) => {
         isHidden: true,
         hiddenUntil,
         lastDonationDate: new Date(),
-        $push: { donationHistory: { date: new Date(), hospitalName: request.hospitalName } },
+        $push: { 
+          donationHistory: { 
+            date: new Date(), 
+            hospitalName: request.hospitalName || 'Blood Center (Emergency)',
+            registeredByType: 'self' 
+          } 
+        },
       });
     }
 

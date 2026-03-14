@@ -27,39 +27,65 @@ router.post('/generate/:donorId', protect, hospitalOnly, async (req, res) => {
     const buffers = [];
     doc.on('data', buffers.push.bind(buffers));
     doc.on('end', async () => {
-      const pdfBuffer = Buffer.concat(buffers);
+      try {
+        const pdfBuffer = Buffer.concat(buffers);
 
-      // Upload to Cloudinary
-      const uploadResult = await new Promise((resolve, reject) => {
-        const uploadStream = cloudinary.uploader.upload_stream(
-          { 
-            resource_type: 'auto', 
-            folder: 'bloodlink-certificates', 
-            public_id: `cert_${donor._id}_${Date.now()}.pdf` 
-          },
-          (err, result) => {
-            if (err) {
-              console.error('Cloudinary Generation Error:', err);
-              reject(err);
-            } else resolve(result);
+        // Upload to Cloudinary
+        const uploadResult = await new Promise((resolve, reject) => {
+          const uploadStream = cloudinary.uploader.upload_stream(
+            { 
+              resource_type: 'auto', 
+              folder: 'bloodlink-certificates', 
+              public_id: `cert_${donor._id}_${Date.now()}.pdf` 
+            },
+            (err, result) => {
+              if (err) {
+                console.error('Cloudinary Generation Error:', err);
+                reject(err);
+              } else resolve(result);
+            }
+          );
+          uploadStream.end(pdfBuffer);
+        });
+
+        // SMART SAVE: Try to find an existing donation entry for today from THIS hospital to avoid duplicates
+        const donorData = await Donor.findById(req.params.donorId);
+        let updated = false;
+        const todayStr = new Date().toDateString();
+
+        if (donorData.donationHistory) {
+          // Look for an entry today that doesn't have a certificate yet
+          const existingIdx = donorData.donationHistory.findIndex(h => 
+            new Date(h.date).toDateString() === todayStr && !h.certificateUrl
+          );
+
+          if (existingIdx !== -1) {
+            donorData.donationHistory[existingIdx].certificateUrl = uploadResult.secure_url;
+            donorData.donationHistory[existingIdx].hospitalName = req.user.name; // Use official name
+            donorData.donationHistory[existingIdx].registeredByType = req.user.type;
+            await donorData.save();
+            updated = true;
           }
-        );
-        uploadStream.end(pdfBuffer);
-      });
+        }
 
-      // Save cert URL to donor
-      await Donor.findByIdAndUpdate(req.params.donorId, {
-        $push: {
-          donationHistory: {
-            date: donationDate || new Date(),
-            hospitalName: hospitalName || req.user.name,
-            certificateUrl: uploadResult.secure_url,
-            registeredByType: req.user.type
-          }
-        },
-      });
+        if (!updated) {
+          await Donor.findByIdAndUpdate(req.params.donorId, {
+            $push: {
+              donationHistory: {
+                date: donationDate || new Date(),
+                hospitalName: hospitalName || req.user.name,
+                certificateUrl: uploadResult.secure_url,
+                registeredByType: req.user.type
+              }
+            },
+          });
+        }
 
-      res.json({ certificateUrl: uploadResult.secure_url, message: 'Certificate generated successfully' });
+        res.json({ certificateUrl: uploadResult.secure_url, message: 'Certificate generated successfully' });
+      } catch (err) {
+        console.error('PDF Finalization Error:', err);
+        if (!res.headersSent) res.status(500).json({ message: err.message });
+      }
     });
 
     // PDF Design
@@ -110,9 +136,31 @@ router.post('/upload/:donorId', protect, hospitalOnly, upload.single('certificat
       uploadStream.end(req.file.buffer);
     });
 
-    await Donor.findByIdAndUpdate(req.params.donorId, {
-      $push: { donationHistory: { date: new Date(), hospitalName: req.user.name, certificateUrl: uploadResult.secure_url, registeredByType: req.user.type } },
-    });
+    // SMART SAVE: Try to find an existing donation entry for today from THIS hospital to avoid duplicates
+    const donorData = await Donor.findById(req.params.donorId);
+    let updated = false;
+    const todayStr = new Date().toDateString();
+
+    if (donorData.donationHistory) {
+      // Look for an entry today that doesn't have a certificate yet
+      const existingIdx = donorData.donationHistory.findIndex(h => 
+        new Date(h.date).toDateString() === todayStr && !h.certificateUrl
+      );
+
+      if (existingIdx !== -1) {
+        donorData.donationHistory[existingIdx].certificateUrl = uploadResult.secure_url;
+        donorData.donationHistory[existingIdx].hospitalName = req.user.name; // Use official name
+        donorData.donationHistory[existingIdx].registeredByType = req.user.type;
+        await donorData.save();
+        updated = true;
+      }
+    }
+
+    if (!updated) {
+      await Donor.findByIdAndUpdate(req.params.donorId, {
+        $push: { donationHistory: { date: new Date(), hospitalName: req.user.name, certificateUrl: uploadResult.secure_url, registeredByType: req.user.type } },
+      });
+    }
 
     res.json({ certificateUrl: uploadResult.secure_url });
   } catch (err) {
