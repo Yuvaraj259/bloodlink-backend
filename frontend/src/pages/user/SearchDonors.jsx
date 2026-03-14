@@ -187,6 +187,23 @@ export default function SearchDonors() {
     }
   }
 
+  const checkStatus = async () => {
+    try {
+      const res = await API.get(`/requests/my`)
+      const accepted = res.data.find(r => 
+        r._id === waitingModal?.requestId && r.status === 'accepted'
+      )
+      if (accepted) {
+        const donorRes = await API.get(`/donors/${waitingModal.donor._id}/contact`)
+        setApprovedDonor(donorRes.data)
+        setWaitingModal(null)
+        toast.success('🎉 Donor accepted!')
+      } else {
+        toast.info('Still waiting for donor response...')
+      }
+    } catch { toast.error('Failed to check status') }
+  }
+
   return (
     <DashboardLayout links={links} portalLabel="User">
       <div className="animate-fade-in">
@@ -315,18 +332,7 @@ export default function SearchDonors() {
               </div>
 
               <div className="space-y-3">
-                <button onClick={() => {
-                  API.get(`/requests/my`).then(r => {
-                    const updated = r.data.find(req => req._id === waitingModal.requestId)
-                    if (updated?.status === 'accepted') {
-                      toast.success('Found accepted status! Updating...')
-                      setApprovedDonor(updated.acceptedBy)
-                      setWaitingModal(null)
-                    } else {
-                      toast.info('Still waiting for donor response...')
-                    }
-                  })
-                }} className="btn-primary py-2 text-sm w-full bg-blue-600 hover:bg-blue-700">
+                <button onClick={checkStatus} className="btn-primary py-2 text-sm w-full bg-blue-600 hover:bg-blue-700">
                   Check Current Status
                 </button>
                 <button onClick={() => { clearTimeout(waitingTimerRef.current); setWaitingModal(null) }}
