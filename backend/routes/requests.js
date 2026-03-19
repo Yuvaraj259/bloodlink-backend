@@ -144,8 +144,8 @@ router.post('/:id/accept', protect, async (req, res) => {
     io.emit('donor_accepted', payload);
     io.emit(`request_accepted_${req.params.id}`, payload);
 
-    // Notify other donors that request is fulfilled (Atomic Broadcast)
-    if (request.notifiedDonors) {
+    // Notify other donors that request is fulfilled (Atomic Broadcast) - Only if multiple donors were notified
+    if (request.notifiedDonors && request.notifiedDonors.length > 1) {
       const otherDonors = await Donor.find({
         _id: { $in: request.notifiedDonors, $ne: req.userId }
       });
@@ -228,7 +228,7 @@ router.post('/:id/fulfill', protect, async (req, res) => {
     if (request.acceptedBy) {
       const hiddenUntil = new Date();
       hiddenUntil.setMonth(hiddenUntil.getMonth() + 3);
-      await Donor.findByIdAndUpdate(request.acceptedBy, {
+      const donor = await Donor.findByIdAndUpdate(request.acceptedBy, {
         isHidden: true,
         hiddenUntil,
         lastDonationDate: new Date(),
@@ -239,7 +239,26 @@ router.post('/:id/fulfill', protect, async (req, res) => {
             registeredByType: 'self' 
           } 
         },
-      });
+      }, { new: true });
+
+      // Send Thank You SMS to the donor
+      if (donor && process.env.TWILIO_ACCOUNT_SID && !process.env.TWILIO_ACCOUNT_SID.includes('your_')) {
+        try {
+          const twilio = require('twilio')(process.env.TWILIO_ACCOUNT_SID, process.env.TWILIO_AUTH_TOKEN);
+          let donorPhone = donor.phone.trim();
+          if (donorPhone.length === 10 && !donorPhone.startsWith('+')) {
+            donorPhone = `+91${donorPhone}`;
+          }
+          await twilio.messages.create({
+            body: `BLOODLINK: Thank you for donating blood! Your generous contribution at ${request.hospitalName || 'the hospital'} helps save lives. We are grateful for your support.`,
+            from: process.env.TWILIO_PHONE_NUMBER,
+            to: donorPhone,
+          });
+          console.log(`Thank you SMS sent to donor ${donor.name} (${donorPhone})`);
+        } catch (smsErr) {
+          console.error('Fulfillment SMS error:', smsErr.message);
+        }
+      }
     }
 
     res.json({ message: 'Donation approved. Donor hidden for 3 months.', request });
@@ -349,8 +368,8 @@ router.post('/sms-reply', async (req, res) => {
     // Broadcast to all (fallback)
     io.emit('donor_accepted', payload);
 
-    // Notify other donors that request is fulfilled (SMS Webhook Atomic Broadcast)
-    if (request.notifiedDonors) {
+    // Notify other donors that request is fulfilled (SMS Webhook Atomic Broadcast) - Only if multiple donors were notified
+    if (request.notifiedDonors && request.notifiedDonors.length > 1) {
       const otherDonors = await Donor.find({
         _id: { $in: request.notifiedDonors, $ne: donor._id }
       });
