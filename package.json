@@ -3,6 +3,7 @@
   "version": "1.0.0",
   "scripts": {
     "install:all": "cd backend && npm install && cd ../frontend && npm install",
+    "predev": "npx kill-port 5000",
     "dev": "concurrently \"cd backend && npm run dev\" \"cd frontend && npm run dev\"",
     "start": "cd backend && npm start"
   },

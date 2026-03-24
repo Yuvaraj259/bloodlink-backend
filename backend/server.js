@@ -29,9 +29,12 @@ app.use((req, res, next) => {
 // FIX 2: Add database name to MongoDB URI
 const rawUri = process.env.MONGO_URI || '';
 const mongoUri = rawUri.includes('/bloodlink') ? rawUri : rawUri.replace('/?', '/bloodlink?').replace(/\/$/, '/bloodlink');
-mongoose.connect(mongoUri)
+mongoose.connect(mongoUri, {
+  serverSelectionTimeoutMS: 30000, // Wait 30 seconds instead of default 5
+  socketTimeoutMS: 45000, // Close sockets after 45 seconds of inactivity
+})
   .then(() => console.log('MongoDB Connected to: bloodlink'))
-  .catch(err => console.error('MongoDB Error:', err.message));
+  .catch(err => console.log('MongoDB Error: ' + err.message));
 
 // FIX 3: Set io and connectedUsers BEFORE routes
 const connectedUsers = {};

@@ -31,6 +31,7 @@ const donorSchema = new mongoose.Schema({
     registeredByType: { type: String, enum: ['hospital', 'bootcamp', 'self'] },
   }],
   lastDonationDate: Date,
+  healthCertificateUrl: String,   // Reference to the uploaded health certificate
   privacyLevel: { type: String, enum: ['public', 'private'], default: 'private' },
 }, { timestamps: true });
 

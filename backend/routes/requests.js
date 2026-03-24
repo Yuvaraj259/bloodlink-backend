@@ -20,7 +20,7 @@ router.get('/active', protect, async (req, res) => {
 // Send emergency blood request
 router.post('/', protect, async (req, res) => {
   try {
-    const { patientName, bloodGroup, hospitalName, message, urgency, location, donorIds } = req.body;
+    const { patientName, bloodGroup, hospitalName, message, urgency, location, donorIds, userLocation } = req.body;
 
     // Find nearby available donors (broad search for testing)
     let query = {};
@@ -42,6 +42,7 @@ router.post('/', protect, async (req, res) => {
     const request = await BloodRequest.create({
       requestedBy: req.userId,
       patientName, bloodGroup, hospitalName, message, urgency, location,
+      userLocation,
       notifiedDonors: donors.map(d => d._id),
     });
 
@@ -82,6 +83,7 @@ router.post('/', protect, async (req, res) => {
       hospitalName,
       message,
       urgency,
+      userLocation: request.userLocation
     };
 
     donors.forEach(donor => {
@@ -132,7 +134,17 @@ router.post('/:id/accept', protect, async (req, res) => {
       location: donor.location,
     };
 
-    const payload = { donorId: req.userId, location, requestId: req.params.id, donor: donorContact };
+    const payload = { 
+      donorId: req.userId, 
+      location, 
+      requestId: req.params.id, 
+      donor: donorContact,
+      donorName: donor.name,
+      donorPhone: donor.phone,
+      donorEmail: donor.email,
+      donorBloodGroup: donor.bloodGroup,
+      donorCity: donor.location?.city
+    };
 
     // Notify the user who sent the request
     const requesterId = request.requestedBy?.toString();

@@ -11,6 +11,11 @@ const bloodRequestSchema = new mongoose.Schema({
     city: String,
     coordinates: { lat: Number, lng: Number },
   },
+  userLocation: {
+    lat: Number,
+    lng: Number,
+    address: String
+  },
   status: { type: String, enum: ['pending', 'accepted', 'fulfilled', 'cancelled'], default: 'pending' },
   notifiedDonors: [{ type: mongoose.Schema.Types.ObjectId, ref: 'Donor' }],
   acceptedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'Donor' },

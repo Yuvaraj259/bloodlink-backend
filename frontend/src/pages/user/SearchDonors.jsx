@@ -1,11 +1,14 @@
 import { useState, useEffect, useRef } from 'react'
-import { Search, MapPin, Phone, Eye, MessageCircle, CheckCircle, X, Loader, Clock, UserCheck, XCircle } from 'lucide-react'
+import { Search, MapPin, Phone, Eye, MessageCircle, CheckCircle, X, Loader, Clock, UserCheck, XCircle, Navigation, ExternalLink } from 'lucide-react'
 import { toast } from 'react-toastify'
 import DashboardLayout from '../../components/Shared/DashboardLayout'
 import { Droplets, Building2, Heart } from 'lucide-react'
 import API from '../../utils/api'
 import { useAuth } from '../../context/AuthContext'
 import { useSocket } from '../../context/SocketContext'
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
+import L from 'leaflet'
 
 const links = [
   { to: '/user', label: 'Dashboard', icon: Droplets },
@@ -14,6 +17,39 @@ const links = [
   { to: '/user/requests', label: 'My Requests', icon: Clock },
   { to: '/user/profile', label: 'My Profile', icon: Heart },
 ]
+
+
+// Fix Leaflet icon issue
+delete L.Icon.Default.prototype._getIconUrl
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+})
+
+// Haversine Distance Formula
+function getDistanceKm(lat1, lng1, lat2, lng2) {
+  if (!lat1 || !lng1 || !lat2 || !lng2) return null
+  const R = 6371
+  const dLat = (lat2 - lat1) * Math.PI / 180
+  const dLng = (lng2 - lng1) * Math.PI / 180
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng/2) * Math.sin(dLng/2)
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a))
+}
+
+// Map Auto-fitter
+function RecenterMap({ points }) {
+  const map = useMap()
+  useEffect(() => {
+    if (points.length >= 2) {
+      const bounds = L.latLngBounds(points)
+      map.fitBounds(bounds, { padding: [50, 50] })
+    }
+  }, [points, map])
+  return null
+}
 
 const BLOOD_GROUPS = ['A+', 'A-', 'B+', 'B-', 'AB+', 'AB-', 'O+', 'O-']
 
@@ -28,6 +64,8 @@ export default function SearchDonors() {
   const [requestModal, setRequestModal] = useState(null)
   const [sendingRequest, setSendingRequest] = useState(false)
   const [requestForm, setRequestForm] = useState({ patientName: '', hospitalName: '', message: '', urgency: 'urgent' })
+  const [userLocation, setUserLocation] = useState(null)
+
 
   // Waiting for donor approval state
   const [waitingModal, setWaitingModal] = useState(null)   // { donor, requestId }
@@ -111,6 +149,19 @@ export default function SearchDonors() {
 
   const handleSendMessage = async () => {
     try {
+      setSendingRequest(true)
+      // Capture user location
+      let currentPos = null
+      try {
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { enableHighAccuracy: true, timeout: 5000 })
+        })
+        currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        setUserLocation(currentPos)
+      } catch (err) {
+        console.warn('Geolocation failed', err)
+      }
+
       // Send a blood request targeting this specific donor
       const res = await API.post('/requests', {
         patientName: auth?.user?.name || 'Patient',
@@ -118,6 +169,7 @@ export default function SearchDonors() {
         location: { city: contactModal.location?.city },
         message: 'A user wants to contact you regarding blood donation.',
         urgency: 'urgent',
+        userLocation: currentPos
       })
       const requestId = res.data.request?._id
 
@@ -146,11 +198,22 @@ export default function SearchDonors() {
   const handleSendRequest = async () => {
     setSendingRequest(true)
     try {
-      const userLocation = auth?.user?.location || {}
+      // Get user location
+      let currentPos = null
+      try {
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+        })
+        currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        setUserLocation(currentPos)
+      } catch (err) { console.warn(err) }
+
+      const userLocationInfo = auth?.user?.location || {}
       const res = await API.post('/requests', {
         ...requestForm,
         bloodGroup: filters.bloodGroup || requestModal?.bloodGroup || '',
-        location: { city: userLocation.city || filters.city },
+        location: { city: userLocationInfo.city || filters.city },
+        userLocation: currentPos
       })
       toast.success(`🩸 Request sent to ${res.data.notifiedCount} donors!`)
       setRequestModal(null)
@@ -168,6 +231,16 @@ export default function SearchDonors() {
 
     setSendingRequest(true)
     try {
+      // Get user location
+      let currentPos = null
+      try {
+        const pos = await new Promise((resolve, reject) => {
+          navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 })
+        })
+        currentPos = { lat: pos.coords.latitude, lng: pos.coords.longitude }
+        setUserLocation(currentPos)
+      } catch (err) { console.warn(err) }
+
       const visibleDonorIds = donors.map(d => d._id)
 
       const res = await API.post('/requests', {
@@ -178,6 +251,7 @@ export default function SearchDonors() {
         bloodGroup: filters.bloodGroup || '',
         location: { city: filters.city || user?.location?.city },
         donorIds: visibleDonorIds,
+        userLocation: currentPos
       })
       toast.success(`💥 EMERGENCY BROADCAST SENT to ${res.data.notifiedCount} donors!`)
     } catch (err) {
@@ -368,25 +442,88 @@ export default function SearchDonors() {
                   <a href={`tel:${approvedDonor.phone}`} className="text-blood-600 font-bold hover:underline">{approvedDonor.phone}</a>
                 } />
                 <InfoRow label="📧 Email" value={approvedDonor.email} />
-                <InfoRow label="📍 City" value={approvedDonor.location?.city} />
+                <InfoRow label="📍 City" value={approvedDonor.location?.city || approvedDonor.donorCity} />
 
+                {/* Map Section */}
                 {(() => {
-                  const currentLoc = liveLocation || approvedDonor.location?.coordinates
-                  if (!currentLoc?.lat || !currentLoc?.lng) return null
+                  const donorPos = liveLocation || approvedDonor.donorLocation || approvedDonor.location?.coordinates
+                  const hasDonorCoords = donorPos?.lat && donorPos?.lng
+                  const hasUserCoords = userLocation?.lat && userLocation?.lng
+
+                  if (!hasDonorCoords) {
+                    return (
+                      <div className="mt-4 p-4 bg-orange-50 rounded-xl border border-orange-100 text-sm text-orange-700">
+                        <p className="font-bold flex items-center gap-2">
+                          <MapPin className="w-4 h-4" /> Fallback Location
+                        </p>
+                        <p>GPS coords not available (Donor accepted via SMS). Please use the city address above.</p>
+                      </div>
+                    )
+                  }
+
+                  const distance = hasUserCoords ? getDistanceKm(userLocation.lat, userLocation.lng, donorPos.lat, donorPos.lng) : null
 
                   return (
-                    <div className="mt-4 p-4 bg-white rounded-xl border border-blue-100 shadow-inner">
-                      <div className="flex items-center gap-2 text-xs text-blue-600 font-bold mb-2">
-                        <span className="relative flex h-2 w-2">
-                          <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-blue-400 opacity-75"></span>
-                          <span className="relative inline-flex rounded-full h-2 w-2 bg-blue-600"></span>
-                        </span>
-                        LIVE LOCATION SHARING ACTIVE
+                    <div className="mt-4 space-y-3">
+                      <div className="rounded-2xl overflow-hidden border border-gray-200 shadow-sm" style={{ height: '250px' }}>
+                        <MapContainer 
+                          center={[donorPos.lat, donorPos.lng]} 
+                          zoom={13} 
+                          style={{ height: '100%', width: '100%' }}
+                          scrollWheelZoom={false}
+                        >
+                          <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                          
+                          {/* Donor Marker */}
+                          <Marker position={[donorPos.lat, donorPos.lng]} icon={L.divIcon({
+                            className: 'custom-div-icon',
+                            html: `<div style="background-color:#ef4444; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.3);"></div>`,
+                            iconSize: [12, 12],
+                            iconAnchor: [6, 6]
+                          })}>
+                            <Popup>Donor Location</Popup>
+                          </Marker>
+
+                          {/* User Marker */}
+                          {hasUserCoords && (
+                            <>
+                              <Marker position={[userLocation.lat, userLocation.lng]} icon={L.divIcon({
+                                className: 'custom-div-icon',
+                                html: `<div style="background-color:#3b82f6; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.3);"></div>`,
+                                iconSize: [12, 12],
+                                iconAnchor: [6, 6]
+                              })}>
+                                <Popup>You are here</Popup>
+                              </Marker>
+                              <Polyline positions={[[userLocation.lat, userLocation.lng], [donorPos.lat, donorPos.lng]]} color="#6366f1" weight={3} dashArray="5, 10" />
+                              <RecenterMap points={[[userLocation.lat, userLocation.lng], [donorPos.lat, donorPos.lng]]} />
+                            </>
+                          )}
+                        </MapContainer>
                       </div>
-                      <a href={`https://www.google.com/maps/search/?api=1&query=${currentLoc.lat},${currentLoc.lng}`}
-                        target="_blank" rel="noreferrer"
-                        className="flex items-center justify-center gap-2 w-full py-2 bg-blue-50 text-blue-700 rounded-lg text-sm font-bold hover:bg-blue-100 transition-colors">
-                        <MapPin className="w-4 h-4" /> Track on Google Maps
+
+                      <div className="flex items-center justify-between text-xs font-medium text-gray-500">
+                        <div className="flex items-center gap-3">
+                          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500"></div> You</span>
+                          <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-red-500"></div> Donor</span>
+                        </div>
+                        {distance !== null && (
+                          <div className={`px-2 py-1 rounded-full font-bold ${
+                            distance < 2 ? 'bg-green-100 text-green-700' : 
+                            distance < 10 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'
+                          }`}>
+                            📍 {distance.toFixed(1)} km away
+                          </div>
+                        )}
+                      </div>
+
+                      <a 
+                        href={`https://www.google.com/maps/dir/?api=1&origin=${userLocation?.lat},${userLocation?.lng}&destination=${donorPos.lat},${donorPos.lng}`}
+                        target="_blank" 
+                        rel="noreferrer"
+                        className="flex items-center justify-center gap-2 w-full py-2.5 bg-indigo-50 text-indigo-700 rounded-xl text-sm font-bold hover:bg-indigo-100 transition-colors"
+                      >
+                        <Navigation className="w-4 h-4" /> Get Directions
                       </a>
                     </div>
                   )

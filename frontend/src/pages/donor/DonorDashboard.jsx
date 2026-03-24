@@ -1,11 +1,47 @@
 import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
-import { Heart, Award, Clock, User, Bell, CheckCircle, XCircle, MapPin, Droplets, FileText } from 'lucide-react'
+import { Heart, Award, Clock, User, Bell, CheckCircle, XCircle, MapPin, Droplets, FileText, Loader, Navigation } from 'lucide-react'
 import { toast } from 'react-toastify'
 import DashboardLayout from '../../components/Shared/DashboardLayout'
 import { useAuth } from '../../context/AuthContext'
 import { useSocket } from '../../context/SocketContext'
 import API from '../../utils/api'
+import { MapContainer, TileLayer, Marker, Popup, Polyline, useMap } from 'react-leaflet'
+import 'leaflet/dist/leaflet.css'
+import L from 'leaflet'
+
+
+// Fix Leaflet icon issue
+delete L.Icon.Default.prototype._getIconUrl
+L.Icon.Default.mergeOptions({
+  iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
+  iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
+  shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
+})
+
+// Haversine Distance Formula
+function getDistanceKm(lat1, lng1, lat2, lng2) {
+  if (!lat1 || !lng1 || !lat2 || !lng2) return null
+  const R = 6371;
+  const dLat = (lat2 - lat1) * Math.PI / 180;
+  const dLng = (lng2 - lng1) * Math.PI / 180;
+  const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+    Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+    Math.sin(dLng/2) * Math.sin(dLng/2);
+  return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+}
+
+// Map Auto-fitter
+function RecenterMap({ points }) {
+  const map = useMap()
+  useEffect(() => {
+    if (points.length >= 2) {
+      const bounds = L.latLngBounds(points)
+      map.fitBounds(bounds, { padding: [50, 50] })
+    }
+  }, [points, map])
+  return null
+}
 
 const links = [
   { to: '/donor', label: 'Dashboard', icon: Droplets },
@@ -24,6 +60,7 @@ export default function DonorDashboard() {
   const [myLocation, setMyLocation] = useState(null)
   const [acceptedRequestId, setAcceptedRequestId] = useState(null)
   const [accepting, setAccepting] = useState(false)
+  const [showMapModal, setShowMapModal] = useState(false)
 
   useEffect(() => {
     API.get('/donors/history').then(r => setHistory(r.data?.donationHistory || [])).catch(() => { })
@@ -51,6 +88,7 @@ export default function DonorDashboard() {
     const handleFulfilled = (data) => {
       if (activeRequest?.requestId === data.requestId) {
         setActiveRequest(null)
+        setShowMapModal(false)
         toast.dismiss()
         toast.success('✅ A donor has already been found. Thank you for your coordination!', { icon: '🙏' })
       }
@@ -100,36 +138,32 @@ export default function DonorDashboard() {
     }
   }, [acceptedRequestId, socketRef, donor?._id])
 
-  const handleAccept = async () => {
-    setAccepting(true)
-    const options = { enableHighAccuracy: true, timeout: 5000, maximumAge: 0 }
-
-    const proceedAccept = async (location = null) => {
-      try {
-        await API.post(`/requests/${activeRequest.requestId}/accept`, { location })
-        toast.success('You accepted! Your location is being shared.')
-        setAcceptedRequestId(activeRequest.requestId)
-        setActiveRequest(null)
-      } catch {
-        toast.error('Failed to accept')
-      } finally {
-        setAccepting(false)
-      }
-    }
-
+  const handleAcceptClick = () => {
     navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        const location = { lat: pos.coords.latitude, lng: pos.coords.longitude }
-        setMyLocation(location)
-        await proceedAccept(location)
+      (pos) => {
+        setMyLocation({ lat: pos.coords.latitude, lng: pos.coords.longitude })
+        setShowMapModal(true)
       },
-      async (err) => {
-        console.warn('Geolocation failed or timed out:', err.message)
-        // Proceed even without location if it takes too long
-        await proceedAccept(null)
-      },
-      options
+      (err) => {
+        toast.error('Location access denied. We need your location to proceed.')
+        console.error(err)
+      }
     )
+  }
+
+  const confirmAccept = async () => {
+    setAccepting(true)
+    try {
+      await API.post(`/requests/${activeRequest.requestId}/accept`, { location: myLocation })
+      toast.success('You accepted! Your location is being shared.')
+      setAcceptedRequestId(activeRequest.requestId)
+      setActiveRequest(null)
+      setShowMapModal(false)
+    } catch {
+      toast.error('Failed to accept')
+    } finally {
+      setAccepting(false)
+    }
   }
 
   const handleDecline = async () => {
@@ -137,8 +171,10 @@ export default function DonorDashboard() {
       await API.post(`/requests/${activeRequest.requestId}/decline`)
       toast.info('You declined. Thank you for responding.')
       setActiveRequest(null)
+      setShowMapModal(false)
     } catch { toast.error('Failed to decline') }
   }
+
 
   const isHidden = donor?.isHidden
   const hiddenUntil = donor?.hiddenUntil
@@ -176,7 +212,7 @@ export default function DonorDashboard() {
               <button onClick={handleDecline} className="flex-1 flex items-center justify-center gap-2 bg-gray-100 text-gray-700 px-4 py-3 rounded-xl font-medium hover:bg-gray-200 transition-colors">
                 <XCircle className="w-5 h-5" /> NO
               </button>
-              <button onClick={handleAccept} disabled={accepting}
+              <button onClick={handleAcceptClick} disabled={accepting}
                 className="flex-1 flex items-center justify-center gap-2 bg-blood-600 text-white px-4 py-3 rounded-xl font-bold hover:bg-blood-700 transition-colors disabled:opacity-70">
                 {accepting ? <><Loader className="w-5 h-5 animate-spin" /> Accepting...</> : <><CheckCircle className="w-5 h-5" /> YES, I'll Donate</>}
               </button>
@@ -184,6 +220,97 @@ export default function DonorDashboard() {
           </div>
         </div>
       )}
+
+      {/* Map Preview Modal before accepting */}
+      {showMapModal && activeRequest && (
+        <div className="fixed inset-0 bg-black/60 z-[60] flex items-center justify-center p-4">
+          <div className="bg-white rounded-2xl p-6 max-w-lg w-full shadow-2xl animate-fade-in">
+            <h3 className="font-display text-xl font-bold mb-2">Location Overview</h3>
+            <p className="text-gray-500 text-sm mb-4">View the patient's location before confirming your arrival.</p>
+            
+            <div className="rounded-xl overflow-hidden border border-gray-200 mb-4" style={{ height: '250px' }}>
+              <MapContainer 
+                center={[myLocation?.lat || 0, myLocation?.lng || 0]} 
+                zoom={13} 
+                style={{ height: '100%', width: '100%' }}
+              >
+                <TileLayer url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png" />
+                
+                {/* Donor Marker */}
+                {myLocation && (
+                  <Marker position={[myLocation.lat, myLocation.lng]} icon={L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background-color:#3b82f6; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.3);"></div>`,
+                    iconSize: [12, 12],
+                    iconAnchor: [6, 6]
+                  })}>
+                    <Popup>Your Location</Popup>
+                  </Marker>
+                )}
+
+                {/* User/Patient Marker */}
+                {activeRequest.userLocation && (
+                  <Marker position={[activeRequest.userLocation.lat, activeRequest.userLocation.lng]} icon={L.divIcon({
+                    className: 'custom-div-icon',
+                    html: `<div style="background-color:#ef4444; width:12px; height:12px; border-radius:50%; border:2px solid white; box-shadow: 0 0 5px rgba(0,0,0,0.3);"></div>`,
+                    iconSize: [12, 12],
+                    iconAnchor: [6, 6]
+                  })}>
+                    <Popup>Patient Location</Popup>
+                  </Marker>
+                )}
+
+                {myLocation && activeRequest.userLocation && (
+                   <>
+                    <Polyline positions={[[myLocation.lat, myLocation.lng], [activeRequest.userLocation.lat, activeRequest.userLocation.lng]]} color="#6366f1" weight={3} dashArray="5, 10" />
+                    <RecenterMap points={[[myLocation.lat, myLocation.lng], [activeRequest.userLocation.lat, activeRequest.userLocation.lng]]} />
+                   </>
+                )}
+              </MapContainer>
+            </div>
+
+            <div className="bg-gray-50 rounded-xl p-4 mb-6">
+              {(() => {
+                const dist = getDistanceKm(myLocation?.lat, myLocation?.lng, activeRequest.userLocation?.lat, activeRequest.userLocation?.lng)
+                if (!dist) return <p className="text-sm text-gray-500 italic">User GPS not available</p>
+                
+                return (
+                  <div className="flex flex-col gap-3">
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 font-medium">Distance:</span>
+                      <div className={`px-2 py-1 rounded-full text-xs font-bold ${
+                        dist < 2 ? 'bg-green-100 text-green-700' : 
+                        dist < 10 ? 'bg-orange-100 text-orange-700' : 'bg-red-100 text-red-700'
+                      }`}>
+                        📍 {dist.toFixed(1)} km away
+                      </div>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600 font-medium">Estimated Arrival:</span>
+                      <div className="text-right">
+                        <p className="text-xs font-bold text-gray-800">🚶 {Math.round((dist / 5) * 60)} mins walking</p>
+                        <p className="text-xs font-bold text-gray-800">🚗 {Math.round((dist / 40) * 60)} mins driving</p>
+                      </div>
+                    </div>
+                  </div>
+                )
+              })()}
+            </div>
+
+
+            <div className="flex gap-3">
+              <button onClick={() => setShowMapModal(false)} className="flex-1 btn-secondary py-3">Back</button>
+              <button 
+                onClick={confirmAccept} 
+                className="flex-1 bg-green-600 text-white rounded-xl font-bold hover:bg-green-700 transition-all flex items-center justify-center gap-2 py-3 shadow-lg shadow-green-100"
+              >
+                <Navigation className="w-5 h-5" /> I'm Coming
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
 
       <div className="animate-fade-in">
         <h1 className="font-display text-3xl font-bold text-gray-900 mb-2">Welcome, {donor?.name?.split(' ')[0]} 💉</h1>

@@ -2,7 +2,7 @@
 import { useState } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { toast } from 'react-toastify'
-import { Droplets, Eye, EyeOff } from 'lucide-react'
+import { Droplets, Eye, EyeOff, FileText, Upload, CheckCircle2 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
 import API from '../../utils/api'
 
@@ -134,6 +134,7 @@ export function DonorLogin() {
 
 export function DonorRegister() {
   const [form, setForm] = useState({ name:'',email:'',confirmEmail:'',password:'',phone:'',bloodGroup:'',age:'',gender:'Male',city:'',address:'' })
+  const [certificate, setCertificate] = useState(null)
   const [loading, setLoading] = useState(false)
   const navigate = useNavigate()
 
@@ -147,10 +148,21 @@ export function DonorRegister() {
     if (form.email !== form.confirmEmail) return toast.error("Emails do not match");
     if (!validatePassword(form.password)) return toast.error("Password must be 8+ chars, with uppercase, lowercase, number and special character");
 
+    if (!certificate) return toast.error("Please upload your health certificate for verification");
+
     setLoading(true)
     try {
-      const { confirmEmail, ...submitData } = form;
-      await API.post('/auth/donor/register', { ...submitData, location: { city: form.city, address: form.address } })
+      const formData = new FormData();
+      Object.keys(form).forEach(key => {
+        if (key !== 'confirmEmail' && key !== 'city' && key !== 'address') {
+          formData.append(key, form[key]);
+        }
+      });
+      formData.append('location', JSON.stringify({ city: form.city, address: form.address }));
+      formData.append('certificate', certificate);
+
+      await API.post('/auth/donor/register', formData);
+
       toast.success('Registration submitted! Wait for admin approval.')
       navigate('/login/donor')
     } catch (err) { toast.error(err.response?.data?.message || 'Registration failed') }
@@ -189,7 +201,40 @@ export function DonorRegister() {
         <div><label className="label">City</label><input className="input" value={form.city} onChange={e=>setForm({...form,city:e.target.value})} required /></div>
         <div><label className="label">Address (Optional)</label><input className="input" value={form.address} onChange={e=>setForm({...form,address:e.target.value})} /></div>
       </div>
-      <button type="submit" disabled={loading} className="btn-primary w-full py-3 mt-4">{loading?'Submitting...':'Register for Review'}</button>
+
+      <div className="space-y-2">
+        <label className="label">Health Certificate (Proof of Fitness)</label>
+        <div className="relative group">
+          <input 
+            type="file" 
+            id="cert-upload" 
+            className="hidden" 
+            accept="image/*,.pdf" 
+            onChange={e => setCertificate(e.target.files[0])} 
+          />
+          <label 
+            htmlFor="cert-upload" 
+            className={`flex items-center justify-between w-full px-4 py-3 border-2 border-dashed rounded-xl cursor-pointer transition-all ${
+              certificate 
+              ? 'border-emerald-300 bg-emerald-50 text-emerald-700' 
+              : 'border-gray-200 bg-gray-50 text-gray-400 group-hover:border-blood-300 group-hover:bg-blood-50'
+            }`}
+          >
+            <div className="flex items-center gap-3">
+              {certificate ? <CheckCircle2 className="w-5 h-5 text-emerald-600" /> : <Upload className="w-5 h-5" />}
+              <span className="text-sm font-medium truncate max-w-[200px]">
+                {certificate ? certificate.name : 'Upload Certificate (JPG, PNG, PDF)'}
+              </span>
+            </div>
+            {!certificate && <span className="text-[10px] font-bold uppercase tracking-wider bg-gray-200 text-gray-500 px-2 py-1 rounded">Choose</span>}
+          </label>
+        </div>
+        <p className="text-[10px] text-gray-400 italic">Mandatory for verification. Max 5MB.</p>
+      </div>
+
+      <button type="submit" disabled={loading} className="btn-primary w-full py-3 mt-4">
+        {loading ? 'Submitting Application...' : 'Register for Review'}
+      </button>
     </form>
     <div className="mt-6 text-center">
       <p className="text-sm text-gray-500">Already registered? <Link to="/login/donor" className="text-blood-600 font-semibold hover:underline">Login here</Link></p>

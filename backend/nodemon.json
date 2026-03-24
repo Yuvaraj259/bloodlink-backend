@@ -1,0 +1,4 @@
+{
+  "ignore": ["sms_debug.log", "backend_url.txt", "lt_output.txt", "tunnel.txt", "node_modules"],
+  "delay": "2000"
+}
